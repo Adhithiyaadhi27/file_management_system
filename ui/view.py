@@ -1,22 +1,53 @@
 import customtkinter as ctk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox
 from logic.file_ops import load_json, save_json
-from logic.person_ops import update_person
 from utils.helpers import simple_input
+from logic.person_ops import update_person
+from tkcalendar import Calendar
+from datetime import datetime
 import os
-import shutil
 
 
+# ===== CALENDAR POPUP =====
+def open_calendar(root, current_value, set_value):
+
+    top = ctk.CTkToplevel(root)
+    top.title("Select Date")
+    top.geometry("300x320")
+
+    # 🔥 bring to front
+    top.transient(root)
+    top.grab_set()
+    top.focus_force()
+    top.lift()
+
+    cal = Calendar(top, date_pattern="dd/mm/yyyy")
+    cal.pack(pady=10, fill="both", expand=True)
+
+    # Set existing date if available
+    try:
+        day, month, year = current_value.split("/")
+        cal.selection_set(datetime(int(year), int(month), int(day)))
+    except:
+        pass
+
+    def select():
+        set_value(cal.get_date())
+        top.destroy()
+
+    ctk.CTkButton(top, text="Select", command=select).pack(pady=10)
+
+
+# ===== VIEW =====
 def view_person(root, content, pid, show_dashboard):
 
-    # ===== CLEAR =====
+    # CLEAR SCREEN
     for w in content.winfo_children():
         w.destroy()
 
     frame = ctk.CTkFrame(content)
-    frame.pack(fill="both", expand=True, padx=15, pady=15)
+    frame.pack(fill="both", expand=True)
 
-    # ===== PATH =====
     person_folder = os.path.join("data", pid)
     file_name = os.path.join(person_folder, "data.json")
 
@@ -31,108 +62,95 @@ def view_person(root, content, pid, show_dashboard):
     header.pack(fill="x", pady=10)
 
     ctk.CTkLabel(header,
-                 text=f"👤 {data.get('Full Name','Person')}",
+                 text=f"👤 {pid}",
                  font=("Segoe UI", 20, "bold")
-    ).pack(side="left")
+    ).pack(side="left", padx=10)
 
     ctk.CTkButton(header,
                   text="⬅ Back",
                   command=lambda: show_dashboard(root, content)
-    ).pack(side="right")
+    ).pack(side="right", padx=10)
 
-    # ===== SCROLL AREA =====
-    scroll = ctk.CTkScrollableFrame(frame, corner_radius=10)
-    scroll.pack(fill="both", expand=True, pady=10)
+    # ===== SCROLL =====
+    canvas = ctk.CTkCanvas(frame)
+    inner = ctk.CTkFrame(canvas)
 
-    # ===== FILE FIELDS =====
-    file_fields = [
-        "Age Proof", "ID Proof", "Address Proof", "Photo",
-        "School ID", "Form 16", "Bank Statement",
-        "Bank Cheque 1", "Bank Cheque 2",
-        "Proposal Form 1", "Proposal Form 2",
-        "Visiting Card", "PAN Card Copy"
-    ]
+    scrollbar = ctk.CTkScrollbar(frame, orientation="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=scrollbar.set)
 
-    # ===== OPEN FILE =====
-    def open_file(filename):
-        try:
-            path = os.path.join("data", pid, "files", filename)
-            if os.path.exists(path):
-                os.startfile(path)
-            else:
-                messagebox.showerror("Error", "File not found")
-        except:
-            messagebox.showerror("Error", "Cannot open file")
+    scrollbar.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
 
-    # ===== DISPLAY DATA =====
+    canvas.create_window((0, 0), window=inner, anchor="nw")
+
+    inner.bind("<Configure>", lambda e: canvas.configure(
+        scrollregion=canvas.bbox("all")
+    ))
+
+    # ===== SCROLL SMOOTH =====
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-event.delta / 60), "units")
+
+    inner.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", on_mousewheel))
+    inner.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+    # ===== DATA DISPLAY =====
     for key, value in data.items():
 
-        card = ctk.CTkFrame(scroll, corner_radius=12)
-        card.pack(fill="x", padx=5, pady=5)
+        row = ctk.CTkFrame(inner)
+        row.pack(fill="x", padx=10, pady=5)
 
-        row = ctk.CTkFrame(card, fg_color="transparent")
-        row.pack(fill="x", padx=10, pady=8)
-
-        # Label
         ctk.CTkLabel(row,
                      text=key,
                      width=200,
                      anchor="w",
-                     font=("Segoe UI", 11, "bold")
+                     font=("Segoe UI", 10, "bold")
         ).pack(side="left")
 
-        # ===== VALUE =====
-        if key in file_fields and value:
+        val_label = ctk.CTkLabel(row, text=str(value))
+        val_label.pack(side="left", padx=5)
 
-            val = ctk.CTkButton(
-                row,
-                text=value,
-                fg_color="transparent",
-                text_color="#4da6ff",
-                hover_color="#1f6aa5",
-                command=lambda v=value: open_file(v)
-            )
-            val.pack(side="left", padx=5)
+        # ===== EDIT FUNCTION =====
+        def make_edit(k, label):
 
-        else:
-            val = ctk.CTkLabel(row, text=value)
-            val.pack(side="left", padx=5)
+            def edit_field():
 
-        # ===== EDIT =====
-        def make_edit(k, widget):
+                date_fields = [
+                    "Date of Birth",
+                    "Wedding Anniversary",
+                    "Nominee DOB",
+                    "DOB of each child"
+                ]
 
-            def edit():
+                # ===== DATE FIELD =====
+                if k in date_fields:
 
-                # FILE FIELD
-                if k in file_fields:
-                    f = filedialog.askopenfilename()
-                    if f:
-                        filename = os.path.basename(f)
-                        dest = os.path.join("data", pid, "files", filename)
-
-                        shutil.copy(f, dest)
-                        data[k] = filename
+                    def set_date(new_val):
+                        data[k] = new_val
                         save_json(file_name, data)
+                        label.configure(text=new_val)
 
-                        widget.configure(text=filename)
+                    open_calendar(root, data.get(k, ""), set_date)
 
-                # TEXT FIELD
+                # ===== NORMAL FIELD =====
                 else:
                     new_val = simple_input(root, f"Edit {k}")
+
                     if new_val:
                         data[k] = new_val
                         save_json(file_name, data)
+                        label.configure(text=new_val)
 
-                        widget.configure(text=new_val)
-
+                        # Update dashboard if name changes
                         if k == "Full Name":
                             update_person(pid, new_val)
                             show_dashboard(root, content)
 
-            return edit
+            return edit_field
 
-        ctk.CTkButton(row,
-                      text="✏",
-                      width=40,
-                      command=make_edit(key, val)
+        ctk.CTkButton(
+            row,
+            text="✏",
+            width=40,
+            command=make_edit(key, val_label)
         ).pack(side="right")

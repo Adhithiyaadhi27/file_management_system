@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from datetime import datetime
+from tkcalendar import Calendar
 from utils.helpers import generate_id
 from logic.file_ops import save_json
 from logic.person_ops import add_person
@@ -63,6 +64,51 @@ def open_form(root, content, show_dashboard):
         elif field_type == "dropdown":
             var = ctk.StringVar()
             ctk.CTkOptionMenu(row, variable=var, values=options).pack(side="right")
+            entries[label] = var
+
+        # ===== TEXTAREA (NOTES) =====
+        elif field_type == "textarea":
+            txt = ctk.CTkTextbox(row, height=100)
+            txt.pack(side="right", fill="x", expand=True)
+            entries[label] = txt
+
+        elif field_type == "date":
+
+            container = ctk.CTkFrame(row, fg_color="transparent")
+            container.pack(side="right", fill="x", expand=True)
+
+            var = ctk.StringVar()
+
+            entry = ctk.CTkEntry(container, textvariable=var)
+            entry.pack(side="left", fill="x", expand=True)
+
+            def pick_date():
+                top = ctk.CTkToplevel(root)
+                top.title("Select Date")
+                top.geometry("300x320")
+
+                # ✅ FIX: bring to front
+                top.transient(root)
+                top.grab_set()
+                top.focus_force()
+                top.lift()
+
+                cal = Calendar(top, date_pattern="dd/mm/yyyy")
+                cal.pack(pady=10, fill="both", expand=True)
+
+                def select():
+                    var.set(cal.get_date())
+                    top.destroy()
+
+                ctk.CTkButton(top, text="Select", command=select).pack(pady=10)
+
+            # 📅 Calendar Button
+            ctk.CTkButton(container,
+                        text="📅",
+                        width=40,
+                        command=pick_date
+            ).pack(side="right", padx=5)
+
             entries[label] = var
 
         # ===== FILE =====
@@ -130,7 +176,7 @@ def open_form(root, content, show_dashboard):
     sec = section("👤 Personal Details")
     add(sec, "Full Name")
     add(sec, "Father’s Name")
-    add(sec, "Date of Birth")
+    add(sec, "Date of Birth", "date")
     add(sec, "Marital Status", "dropdown", ["Single", "Married"])
     add(sec, "Spouse Name")
     add(sec, "Nationality")
@@ -142,7 +188,7 @@ def open_form(root, content, show_dashboard):
     # Family
     sec = section("👨‍👩‍👧 Family Details")
     add(sec, "Number of Children")
-    add(sec, "Children DOB")
+    add(sec, "Children DOB", "date")
     add(sec, "Father’s Age")
     add(sec, "Mother’s Age")
     add(sec, "Spouse Age")
@@ -170,14 +216,14 @@ def open_form(root, content, show_dashboard):
 
     # Additional
     sec = section("💍 Additional Details")
-    add(sec, "Wedding Anniversary")
+    add(sec, "Wedding Anniversary", "date")
 
     # Nominee
     sec = section("🧾 Nominee Details")
     add(sec, "Nominee Relationship", "dropdown",
         ["Father", "Mother", "Spouse", "Children", "Appointee"])
     add(sec, "Nominee Name")
-    add(sec, "Nominee DOB")
+    add(sec, "Nominee DOB", "date")
     add(sec, "Nominee Father’s Name")
 
     # Insurance
@@ -234,8 +280,8 @@ def open_form(root, content, show_dashboard):
     add(sec, "Mediclaim")
     add(sec, "Money Back Policy")
     add(sec, "Children’s Education Plan")
-    add(sec, "Reminder Date 1")
-    add(sec, "Reminder Date 2")
+    add(sec, "Reminder Date 1", "date")
+    add(sec, "Reminder Date 2", "date")
 
     # ===== SAVE =====
     def save():
@@ -248,10 +294,15 @@ def open_form(root, content, show_dashboard):
         os.makedirs(files_folder, exist_ok=True)
 
         for k, v in entries.items():
+
             if hasattr(v, "full_path"):
                 filename = os.path.basename(v.full_path)
                 shutil.copy(v.full_path, os.path.join(files_folder, filename))
                 data[k] = filename
+
+            elif isinstance(v, ctk.CTkTextbox):
+                data[k] = v.get("1.0", "end").strip()
+
             else:
                 data[k] = v.get()
 
@@ -268,6 +319,19 @@ def open_form(root, content, show_dashboard):
 
         messagebox.showinfo("Saved", "Person Added Successfully")
         show_dashboard(root, content)
+    
+    # ===== NOTES (VISIBLE, NOT DROPDOWN) =====
+    ctk.CTkLabel(scroll,
+                text="📝 Notes",
+                font=("Segoe UI", 14, "bold")
+    ).pack(anchor="w", padx=10, pady=(15, 5))
+
+    notes_box = ctk.CTkTextbox(scroll, height=120)
+    notes_box.pack(fill="x", padx=10, pady=5)
+
+    notes_box.insert("1.0", "Write notes here...")
+
+    entries["Notes"] = notes_box
 
     ctk.CTkButton(main,
                   text="💾 Save",
